@@ -5,97 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Получить номер телефона</title>
     <style>
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 100vh;
-        margin: 0;
-        background: #f5f7fa;
-        flex-direction: column;
-        padding: 20px;
-      }
-      .card {
-        background: white;
-        border-radius: 16px;
-        padding: 40px 30px;
-        max-width: 500px;
-        width: 100%;
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
-        text-align: center;
-      }
-      h1 {
-        font-size: 24px;
-        font-weight: 600;
-        color: #1e293b;
-        margin-top: 0;
-        margin-bottom: 8px;
-      }
-      .sub {
-        color: #64748b;
-        font-size: 14px;
-        margin-bottom: 24px;
-      }
-      button {
-        width: 100%;
-        padding: 16px 24px;
-        font-size: 18px;
-        font-weight: 600;
-        background: #2563eb;
-        color: white;
-        border: none;
-        border-radius: 12px;
-        cursor: pointer;
-        transition: background 0.15s;
-        touch-action: manipulation;
-      }
-      button:hover {
-        background: #1d4ed8;
-      }
-      button:active {
-        transform: scale(0.97);
-      }
-      #os-info {
-        margin: 12px 0 8px;
-        font-size: 14px;
-        color: #475569;
-      }
-      #result {
-        margin-top: 24px;
-        padding: 16px;
-        border-radius: 12px;
-        background: #f1f5f9;
-        min-height: 60px;
-        font-size: 15px;
-        word-break: break-word;
-        color: #0f172a;
-      }
-      .number-item {
-        background: white;
-        padding: 8px 12px;
-        margin: 6px 0;
-        border-radius: 8px;
-        border: 1px solid #e2e8f0;
-        font-family: "Courier New", monospace;
-        font-size: 16px;
-      }
-      .error {
-        color: #dc2626;
-      }
-      .success {
-        color: #16a34a;
-      }
+      /* ... ваш существующий CSS ... */
     </style>
   </head>
   <body>
     <div class="card">
       <h1>📱 Получение номера</h1>
-      <div class="sub">Выберите свой контакт из телефонной книги</div>
+      <div class="sub">Выберите номер из предложенных Google</div>
 
       <div id="os-info">Определение ОС...</div>
       <button id="getPhoneBtn">Получить номер</button>
@@ -104,6 +20,8 @@
         <span style="color: #94a3b8">Нажмите кнопку, чтобы начать</span>
       </div>
     </div>
+
+    <script src="https://cdn.webtonative.com/webtonative.js"></script>
 
     <script>
       (function () {
@@ -124,79 +42,72 @@
         const os = getOSType();
         osInfo.textContent = `Операционная система: ${os}`;
 
-        // ---------- Основная функция получения номера ----------
-        async function getPhoneNumber() {
-          // Проверяем поддержку API
-          if (!("contacts" in navigator)) {
+        // ---------- Основная функция получения номера (WebToNative) ----------
+        function getPhoneNumber() {
+          // Проверяем, доступен ли WebToNative SDK
+          if (
+            typeof window.WTN === "undefined" ||
+            !window.WTN.getDevicePhoneNumber
+          ) {
             resultDiv.innerHTML = `
-          <div class="error">❌ Ваш браузер не поддерживает Contact Picker API.</div>
-          <div style="font-size:13px; color:#64748b; margin-top:8px;">
-            Попробуйте в Chrome на Android или Safari на iOS.
-          </div>
-        `;
+              <div class="error">❌ WebToNative SDK не загружен.</div>
+              <div style="font-size:13px; color:#64748b; margin-top:8px;">
+                Убедитесь, что вы подключили SDK и открываете страницу в приложении WebToNative.
+              </div>
+            `;
             return;
           }
 
-          try {
-            resultDiv.innerHTML = "⏳ Открывается список контактов...";
-
-            // Запрашиваем доступ к телефонным номерам
-            // Параметр { multiple: true } позволяет выбрать несколько контактов
-            const contacts = await navigator.contacts.select(["tel"], {
-              multiple: true,
-            });
-
-            if (!contacts || contacts.length === 0) {
-              resultDiv.innerHTML = "ℹ️ Вы не выбрали ни одного контакта.";
-              return;
-            }
-
-            // Собираем все номера из выбранных контактов
-            let allNumbers = [];
-            for (const contact of contacts) {
-              if (contact.tel && contact.tel.length > 0) {
-                // contact.tel — это массив строк
-                allNumbers = allNumbers.concat(contact.tel);
-              }
-            }
-
-            if (allNumbers.length === 0) {
-              resultDiv.innerHTML =
-                "ℹ️ В выбранных контактах нет телефонных номеров.";
-              return;
-            }
-
-            // Отображаем номера
-            let html = `<div class="success">✅ Получено номеров: ${allNumbers.length}</div>`;
-            html += allNumbers
-              .map((num) => `<div class="number-item">📞 ${num}</div>`)
-              .join("");
-            resultDiv.innerHTML = html;
-          } catch (error) {
-            console.error("Ошибка при получении контактов:", error);
-            let msg = error.message || "Неизвестная ошибка";
-            // Пользователь мог отменить выбор
-            if (
-              error.name === "AbortError" ||
-              error.name === "NotAllowedError"
-            ) {
-              msg = "Доступ к контактам запрещён или диалог закрыт.";
-            }
-            resultDiv.innerHTML = `<div class="error">❌ Ошибка: ${msg}</div>`;
+          // Проверяем, что ОС — Android (API работает только на Android)
+          if (os !== "Android") {
+            resultDiv.innerHTML = `
+              <div class="error">❌ Этот метод доступен только на Android.</div>
+              <div style="font-size:13px; color:#64748b; margin-top:8px;">
+                Откройте страницу на устройстве Android.
+              </div>
+            `;
+            return;
           }
+
+          resultDiv.innerHTML = "⏳ Открывается выбор номера Google...";
+
+          // Вызываем API WebToNative
+          window.WTN.getDevicePhoneNumber({
+            callback: function (response) {
+              if (response.success && response.phoneNumber) {
+                // Номер получен успешно
+                resultDiv.innerHTML = `
+                  <div class="success">✅ Номер получен:</div>
+                  <div class="number-item">📞 ${response.phoneNumber}</div>
+                `;
+              } else {
+                // Обработка ошибки или отмены
+                let errorMsg = response.error || "Неизвестная ошибка";
+                if (response.error_code === "USER_CANCELED") {
+                  errorMsg = "Вы отменили выбор номера.";
+                }
+                resultDiv.innerHTML = `
+                  <div class="error">❌ Ошибка: ${errorMsg}</div>
+                  <div style="font-size:13px; color:#64748b; margin-top:8px;">
+                    Попробуйте снова или убедитесь, что у вас есть номер в Google-аккаунте.
+                  </div>
+                `;
+              }
+            },
+          });
         }
 
         // ---------- Привязываем обработчик ----------
         btn.addEventListener("click", getPhoneNumber);
 
-        // Если на десктопе – можно показать подсказку
-        if (os === "Desktop") {
+        // Если не Android — показываем подсказку
+        if (os !== "Android") {
           resultDiv.innerHTML = `
-        <div style="color:#94a3b8; font-size:14px;">
-          На десктопе получение номера недоступно.<br>
-          Откройте страницу на смартфоне.
-        </div>
-      `;
+            <div style="color:#94a3b8; font-size:14px;">
+              Получение номера через WebToNative доступно только на Android.<br>
+              Откройте страницу на Android-устройстве.
+            </div>
+          `;
         }
       })();
     </script>
