@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Получить номер телефона</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      background: #f0f0f0;
+      flex-direction: column;
+    }
+    button {
+      padding: 16px 32px;
+      font-size: 18px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #result {
+      margin-top: 20px;
+      font-size: 16px;
+      text-align: center;
+      max-width: 90vw;
+    }
+  </style>
+</head>
+<body>
+  <button id="getPhoneBtn">Получить номер телефона</button>
+  <div id="result"></div>
+
+  <script>
+    document.getElementById('getPhoneBtn').addEventListener('click', () => {
+      const resultDiv = document.getElementById('result');
+      resultDiv.textContent = 'Проверяем систему…';
+
+      const ua = navigator.userAgent;
+      const isAndroid = /Android/i.test(ua);
+      const isIOS = /iPhone|iPad|iPod/i.test(ua);
+      const isDesktop = !isAndroid && !isIOS;
+
+      if (isDesktop) {
+        resultDiv.textContent = 'Работаем с компьютера – определение номера телефона не поддерживается.';
+        return;
+      }
+
+      if (!window.WTNative || typeof window.WTNative.devicePhoneNumber !== 'function') {
+        resultDiv.textContent = 'Webtonative API не найдено.';
+        return;
+      }
+
+      window.WTNative.devicePhoneNumber(
+        (phoneNumber) => {
+          resultDiv.textContent = `Номер телефона: ${phoneNumber}`;
+        },
+        (error) => {
+          resultDiv.textContent = `Ошибка получения номера: ${error.message || error}`;
+        }
+      );
+    });
+  </script>
+</body>
+</html>
