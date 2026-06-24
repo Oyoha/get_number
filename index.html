@@ -95,18 +95,15 @@
   <body>
     <div class="card">
       <h1>📱 Получение номера</h1>
-      <div class="sub">Выберите номер из предложенных Google</div>
-
+      <div class="sub">Выберите номер из предложенных Google или контактов</div>
       <div id="os-info">Определение ОС...</div>
       <button id="getPhoneBtn">Получить номер</button>
-
       <div id="result">
         <span style="color: #94a3b8">Нажмите кнопку, чтобы начать</span>
       </div>
     </div>
 
     <script src="https://unpkg.com/webtonative@1.1.6/webtonative.min.js"></script>
-
     <script>
       (function () {
         "use strict";
@@ -125,62 +122,159 @@
         const os = getOSType();
         osInfo.textContent = `Операционная система: ${os}`;
 
+        function getContactsPicker() {
+          if (!("contacts" in navigator)) {
+            resultDiv.innerHTML = `
+              <div class="error">❌ Ваш браузер не поддерживает Contact Picker.</div>
+              <div style="font-size:13px; color:#64748b; margin-top:8px;">
+                Попробуйте Chrome на Android или Safari на iOS.
+              </div>
+            `;
+            return Promise.reject(new Error("Contact Picker not supported"));
+          }
+
+          resultDiv.innerHTML = "⏳ Открывается список контактов...";
+
+          return navigator.contacts
+            .select(["tel"], { multiple: true })
+            .then((contacts) => {
+              if (!contacts || contacts.length === 0) {
+                resultDiv.innerHTML = "ℹ️ Вы не выбрали ни одного контакта.";
+                return Promise.reject(new Error("No contacts selected"));
+              }
+
+              let allNumbers = [];
+              for (const contact of contacts) {
+                if (contact.tel && contact.tel.length > 0) {
+                  allNumbers = allNumbers.concat(contact.tel);
+                }
+              }
+
+              if (allNumbers.length === 0) {
+                resultDiv.innerHTML =
+                  "ℹ️ В выбранных контактах нет телефонных номеров.";
+                return Promise.reject(new Error("No phone numbers found"));
+              }
+
+              let html = `<div class="success">✅ Получено номеров (из контактов): ${allNumbers.length}</div>`;
+              html += allNumbers
+                .map((num) => `<div class="number-item">📞 ${num}</div>`)
+                .join("");
+              resultDiv.innerHTML = html;
+              return allNumbers;
+            })
+            .catch((error) => {
+              console.error("Contact Picker error:", error);
+              let msg = error.message || "Неизвестная ошибка";
+              if (
+                error.name === "AbortError" ||
+                error.name === "NotAllowedError"
+              ) {
+                msg = "Доступ к контактам запрещён или диалог закрыт.";
+              }
+              resultDiv.innerHTML = `<div class="error">❌ Ошибка Contact Picker: ${msg}</div>`;
+              return Promise.reject(error);
+            });
+        }
+
         function getPhoneNumber() {
+          if (os === "Desktop") {
+            resultDiv.innerHTML = `
+              <div class="error">❌ Получение номера доступно только на мобильных устройствах.</div>
+              <div style="font-size:13px; color:#64748b; margin-top:8px;">
+                Откройте страницу на Android или iOS.
+              </div>
+            `;
+            return;
+          }
+
+          if (os === "iOS") {
+            getContactsPicker();
+            return;
+          }
+
           if (
             typeof window.WTN === "undefined" ||
             !window.WTN.getDevicePhoneNumber
           ) {
-            resultDiv.innerHTML = `
-              <div class="error">❌ WebToNative SDK не загружен.</div>
-              <div style="font-size:13px; color:#64748b; margin-top:8px;">
-                Убедитесь, что вы подключили SDK и открываете страницу в приложении WebToNative.
-              </div>
-            `;
+            resultDiv.innerHTML =
+              "⚠️ WebToNative не загружен. Пробуем Contact Picker...";
+            getContactsPicker();
             return;
           }
 
-          if (os !== "Android") {
-            resultDiv.innerHTML = `
-              <div class="error">❌ Этот метод доступен только на Android.</div>
-              <div style="font-size:13px; color:#64748b; margin-top:8px;">
-                Откройте страницу на устройстве Android.
-              </div>
-            `;
-            return;
-          }
+          let wtnFinished = false;
+          let timeoutId = null;
 
-          resultDiv.innerHTML = "⏳ Открывается выбор номера Google...";
+          resultDiv.innerHTML = "⏳ Пробуем получить номер через Google...";
 
-          window.WTN.getDevicePhoneNumber({
-            callback: function (response) {
-              if (response.success && response.phoneNumber) {
-                resultDiv.innerHTML = `
-                  <div class="success">✅ Номер получен:</div>
-                  <div class="number-item">📞 ${response.phoneNumber}</div>
-                `;
-              } else {
-                let errorMsg = response.error || "Неизвестная ошибка";
-                if (response.error_code === "USER_CANCELED") {
-                  errorMsg = "Вы отменили выбор номера.";
-                }
-                resultDiv.innerHTML = `
-                  <div class="error">❌ Ошибка: ${errorMsg}</div>
-                  <div style="font-size:13px; color:#64748b; margin-top:8px;">
-                    Попробуйте снова или убедитесь, что у вас есть номер в Google-аккаунте.
-                  </div>
-                `;
-              }
-            },
+          const wtnPromise = new Promise((resolve, reject) => {
+            try {
+              window.WTN.getDevicePhoneNumber({
+                callback: function (response) {
+                  if (wtnFinished) return;
+                  wtnFinished = true;
+                  clearTimeout(timeoutId);
+
+                  if (response.success && response.phoneNumber) {
+                    resultDiv.innerHTML = `
+                      <div class="success">✅ Номер получен (через Google):</div>
+                      <div class="number-item">📞 ${response.phoneNumber}</div>
+                    `;
+                    resolve(response.phoneNumber);
+                  } else {
+                    let errorMsg = response.error || "Неизвестная ошибка";
+                    if (response.error_code === "USER_CANCELED") {
+                      errorMsg = "Вы отменили выбор номера Google.";
+                    }
+                    resultDiv.innerHTML = `
+                      <div class="error">❌ Ошибка Google: ${errorMsg}</div>
+                      <div style="font-size:13px; color:#64748b; margin-top:8px;">
+                        Переключаемся на выбор из контактов...
+                      </div>
+                    `;
+                    getContactsPicker().catch(() => {});
+                    reject(new Error(errorMsg));
+                  }
+                },
+              });
+            } catch (e) {
+              if (wtnFinished) return;
+              wtnFinished = true;
+              clearTimeout(timeoutId);
+              resultDiv.innerHTML = `
+                <div class="error">❌ Ошибка вызова WTN: ${e.message}</div>
+                <div style="font-size:13px; color:#64748b; margin-top:8px;">
+                  Переключаемся на выбор из контактов...
+                </div>
+              `;
+              getContactsPicker().catch(() => {});
+              reject(e);
+            }
           });
+
+          timeoutId = setTimeout(() => {
+            if (wtnFinished) return;
+            wtnFinished = true;
+            resultDiv.innerHTML = `
+              <div style="color:#f59e0b; font-weight:600;">⏱️ Время ожидания Google истекло (5 сек).</div>
+              <div style="font-size:13px; color:#64748b; margin-top:8px;">
+                Переключаемся на выбор из контактов...
+              </div>
+            `;
+            getContactsPicker().catch(() => {});
+          }, 5000);
+
+          wtnPromise.catch(() => {});
         }
 
         btn.addEventListener("click", getPhoneNumber);
 
-        if (os !== "Android") {
+        if (os === "Desktop") {
           resultDiv.innerHTML = `
             <div style="color:#94a3b8; font-size:14px;">
-              Получение номера через WebToNative доступно только на Android.<br>
-              Откройте страницу на Android-устройстве.
+              Получение номера доступно только на Android и iOS.<br>
+              Откройте страницу на смартфоне.
             </div>
           `;
         }
