@@ -90,6 +90,16 @@
       .success {
         color: #16a34a;
       }
+      .info {
+        color: #f59e0b;
+      }
+      .retry-btn {
+        background: #f59e0b;
+        margin-top: 10px;
+      }
+      .retry-btn:hover {
+        background: #d97706;
+      }
     </style>
   </head>
   <body>
@@ -112,6 +122,7 @@
         const osInfo = document.getElementById("os-info");
         const btn = document.getElementById("getPhoneBtn");
 
+        // ---------- Определение ОС ----------
         function getOSType() {
           const ua = navigator.userAgent || navigator.vendor || window.opera;
           if (/android/i.test(ua)) return "Android";
@@ -122,12 +133,14 @@
         const os = getOSType();
         osInfo.textContent = `Операционная система: ${os}`;
 
+        let useContactPicker = false;
+
         function getContactsPicker() {
-          if (!("contacts" in navigator)) {
+          if (!("contacts" in navigator) || !("ContactsManager" in window)) {
             resultDiv.innerHTML = `
               <div class="error">❌ Ваш браузер не поддерживает Contact Picker.</div>
               <div style="font-size:13px; color:#64748b; margin-top:8px;">
-                Попробуйте Chrome на Android или Safari на iOS.
+                Попробуйте Chrome на Android или Safari на iOS (с включённым экспериментальным флагом).
               </div>
             `;
             return Promise.reject(new Error("Contact Picker not supported"));
@@ -178,6 +191,11 @@
         }
 
         function getPhoneNumber() {
+          if (useContactPicker) {
+            getContactsPicker().catch(() => {});
+            return;
+          }
+
           if (os === "Desktop") {
             resultDiv.innerHTML = `
               <div class="error">❌ Получение номера доступно только на мобильных устройствах.</div>
@@ -189,7 +207,7 @@
           }
 
           if (os === "iOS") {
-            getContactsPicker();
+            getContactsPicker().catch(() => {});
             return;
           }
 
@@ -198,8 +216,9 @@
             !window.WTN.getDevicePhoneNumber
           ) {
             resultDiv.innerHTML =
-              "⚠️ WebToNative не загружен. Пробуем Contact Picker...";
-            getContactsPicker();
+              "⚠️ WebToNative не загружен. Попробуйте выбрать из контактов.";
+            useContactPicker = true;
+            btn.textContent = "Выбрать из контактов";
             return;
           }
 
@@ -208,64 +227,62 @@
 
           resultDiv.innerHTML = "⏳ Пробуем получить номер через Google...";
 
-          const wtnPromise = new Promise((resolve, reject) => {
-            try {
-              window.WTN.getDevicePhoneNumber({
-                callback: function (response) {
-                  if (wtnFinished) return;
-                  wtnFinished = true;
-                  clearTimeout(timeoutId);
+          try {
+            window.WTN.getDevicePhoneNumber({
+              callback: function (response) {
+                if (wtnFinished) return;
+                wtnFinished = true;
+                clearTimeout(timeoutId);
 
-                  if (response.success && response.phoneNumber) {
-                    resultDiv.innerHTML = `
-                      <div class="success">✅ Номер получен (через Google):</div>
-                      <div class="number-item">📞 ${response.phoneNumber}</div>
-                    `;
-                    resolve(response.phoneNumber);
-                  } else {
-                    let errorMsg = response.error || "Неизвестная ошибка";
-                    if (response.error_code === "USER_CANCELED") {
-                      errorMsg = "Вы отменили выбор номера Google.";
-                    }
-                    resultDiv.innerHTML = `
-                      <div class="error">❌ Ошибка Google: ${errorMsg}</div>
-                      <div style="font-size:13px; color:#64748b; margin-top:8px;">
-                        Переключаемся на выбор из контактов...
-                      </div>
-                    `;
-                    getContactsPicker().catch(() => {});
-                    reject(new Error(errorMsg));
+                if (response.success && response.phoneNumber) {
+                  resultDiv.innerHTML = `
+                    <div class="success">✅ Номер получен (через Google):</div>
+                    <div class="number-item">📞 ${response.phoneNumber}</div>
+                  `;
+                  useContactPicker = false;
+                  btn.textContent = "Получить номер";
+                } else {
+                  let errorMsg = response.error || "Неизвестная ошибка";
+                  if (response.error_code === "USER_CANCELED") {
+                    errorMsg = "Вы отменили выбор номера Google.";
                   }
-                },
-              });
-            } catch (e) {
-              if (wtnFinished) return;
-              wtnFinished = true;
-              clearTimeout(timeoutId);
-              resultDiv.innerHTML = `
-                <div class="error">❌ Ошибка вызова WTN: ${e.message}</div>
-                <div style="font-size:13px; color:#64748b; margin-top:8px;">
-                  Переключаемся на выбор из контактов...
-                </div>
-              `;
-              getContactsPicker().catch(() => {});
-              reject(e);
-            }
-          });
+                  resultDiv.innerHTML = `
+                    <div class="error">❌ Ошибка Google: ${errorMsg}</div>
+                    <div style="font-size:13px; color:#64748b; margin-top:8px;">
+                      Попробуйте выбрать номер из контактов.
+                    </div>
+                  `;
+                  useContactPicker = true;
+                  btn.textContent = "Выбрать из контактов";
+                }
+              },
+            });
+          } catch (e) {
+            if (wtnFinished) return;
+            wtnFinished = true;
+            clearTimeout(timeoutId);
+            resultDiv.innerHTML = `
+              <div class="error">❌ Ошибка вызова WTN: ${e.message}</div>
+              <div style="font-size:13px; color:#64748b; margin-top:8px;">
+                Попробуйте выбрать номер из контактов.
+              </div>
+            `;
+            useContactPicker = true;
+            btn.textContent = "Выбрать из контактов";
+          }
 
           timeoutId = setTimeout(() => {
             if (wtnFinished) return;
             wtnFinished = true;
             resultDiv.innerHTML = `
-              <div style="color:#f59e0b; font-weight:600;">⏱️ Время ожидания Google истекло (5 сек).</div>
+              <div class="info">⏱️ Время ожидания Google истекло (5 сек).</div>
               <div style="font-size:13px; color:#64748b; margin-top:8px;">
-                Переключаемся на выбор из контактов...
+                Попробуйте выбрать номер из контактов.
               </div>
             `;
-            getContactsPicker().catch(() => {});
+            useContactPicker = true;
+            btn.textContent = "Выбрать из контактов";
           }, 5000);
-
-          wtnPromise.catch(() => {});
         }
 
         btn.addEventListener("click", getPhoneNumber);
