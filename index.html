@@ -115,11 +115,14 @@
 
       <div id="os-info">Определение ОС...</div>
 
-      <!-- Кнопка VK ID (кастомная) -->
+      <!-- VK ID -->
       <button id="vkLoginBtn" class="btn-vk">Войти через VK ID</button>
 
-      <!-- Контейнер для виджета Т-Банк (он сам нарисует кнопку) -->
+      <!-- Т-Банк ID (виджет) -->
       <div id="tid-container" style="margin: 16px 0"></div>
+
+      <!-- Сбер ID (официальный виджет через SDK) -->
+      <div id="sberIdContainer" style="margin: 16px 0"></div>
 
       <hr />
 
@@ -145,7 +148,7 @@
         const VKID = window.VKIDSDK;
 
         VKID.Config.init({
-          app: 54663710, // Ваш ID приложения
+          app: 54663710,
           redirectUrl: "https://oyoha.github.io/get_number/callback.html",
           responseMode: VKID.ConfigResponseMode.Callback,
           source: VKID.ConfigSource.LOWCODE,
@@ -160,13 +163,13 @@
               redirect_uri: "https://oyoha.github.io/get_number/callback.html",
               scope: "phone",
               response_type: "token",
-              state: "vk", // метка для callback
+              state: "vk",
             });
           });
       })();
     </script>
 
-    <!-- ===== Виджет Т-Банк ID ===== -->
+    <!-- ===== Т-Банк ID ===== -->
     <script src="https://sso-forms-prod.t-static.ru/tid/widget.js"></script>
     <script>
       (function () {
@@ -178,7 +181,7 @@
         const authParams = {
           redirectUri: "https://oyoha.github.io/get_number/callback.html",
           responseType: "token",
-          clientId: "ВАШ_CLIENT_ID", // замените на свой
+          clientId: "ВАШ_CLIENT_ID_ТБАНКА",
           state: "tbank",
         };
 
@@ -192,6 +195,91 @@
 
         const tidSdk = new TidSDK(authParams);
         tidSdk.addButton(uiParams);
+      })();
+    </script>
+
+    <!-- ===== Сбер ID (официальный SDK) ===== -->
+    <script src="https://id.sber.ru/sdk/web/sberid-sdk.production.js"></script>
+    <script>
+      (function () {
+        if (typeof SberidSDK === "undefined") {
+          console.warn("SDK Сбера не загружен");
+          document.getElementById("result").innerHTML = `
+            <div class="error">❌ SDK Сбер ID не загружен. Проверьте интернет.</div>
+          `;
+          return;
+        }
+
+        // Генерируем случайный nonce для безопасности
+        function generateNonce() {
+          return (
+            Math.random().toString(36).substring(2, 15) +
+            Math.random().toString(36).substring(2, 15)
+          );
+        }
+
+        const sdk = new SberidSDK({
+          oidc: {
+            client_id: "ВАШ_CLIENT_ID_СБЕРА", // замените на свой
+            client_type: "PRIVATE",
+            nonce: generateNonce(),
+            redirect_uri: "https://oyoha.github.io/get_number/callback.html",
+            state: "sber",
+            scope: "openid name phone",
+            response_type: "code",
+            name: "Получение номера",
+          },
+          notification: {
+            enable: false,
+          },
+          container: "#sberIdContainer",
+          onSuccessCallback: function ({ state, code }) {
+            // Этот колбэк вызывается после успешной авторизации
+            // code нужно отправить на ваш бэкенд для обмена на токен и получения номера
+            console.log("Сбер ID успех, code:", code);
+            // Отправляем код на бэкенд
+            fetch("/exchange-sber-code", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ code, state }),
+            })
+              .then((res) => {
+                if (!res.ok) throw new Error("Ошибка сервера");
+                return res.json();
+              })
+              .then((data) => {
+                // data.phone – номер телефона от Сбера
+                document.getElementById("result").innerHTML = `
+                <div class="success">✅ Номер получен через Сбер ID</div>
+                <div class="number-item">📞 ${data.phone}</div>
+              `;
+              })
+              .catch((err) => {
+                document.getElementById("result").innerHTML = `
+                <div class="error">❌ Ошибка получения номера: ${err.message}</div>
+              `;
+              });
+          },
+          onErrorCallback: function (error) {
+            console.error("Сбер ID ошибка:", error);
+            document.getElementById("result").innerHTML = `
+              <div class="error">❌ Ошибка авторизации Сбера: ${error}</div>
+            `;
+          },
+        });
+
+        sdk
+          .init()
+          .then(() => {
+            console.log("SDK Сбера инициализирован");
+            // Кнопка автоматически отрисовывается в контейнере
+          })
+          .catch((err) => {
+            console.error("Ошибка инициализации SDK Сбера:", err);
+            document.getElementById("result").innerHTML = `
+              <div class="error">❌ Ошибка инициализации SDK Сбера: ${err.message}</div>
+            `;
+          });
       })();
     </script>
 

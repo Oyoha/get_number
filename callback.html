@@ -83,8 +83,45 @@
         let accessToken = hashParams.get("access_token");
         let state = hashParams.get("state");
 
-        // Если токена нет, возможно это VK с payload (OneTap)
+        // --- Обработка Сбер ID (приходит code) ---
+        if (state === "sber") {
+          const code = queryParams.get("code");
+          if (code) {
+            // Здесь вы должны отправить код на ваш бэкенд для обмена на токен и получения номера.
+            // Пока просто выведем информацию.
+            resultDiv.innerHTML = `
+              <div class="info">✅ Код авторизации Сбера получен</div>
+              <div style="margin-top:12px; color:#64748b; font-size:14px;">
+                Код будет отправлен на бэкенд для получения номера телефона.
+              </div>
+              <pre>code: ${code}</pre>
+              <button id="sendCodeBtn" style="margin-top:16px; padding:10px 20px; background:#0d8d5a; color:white; border:none; border-radius:8px; cursor:pointer;">
+                Отправить код на бэкенд (заглушка)
+              </button>
+            `;
+
+            // Заглушка для отправки на бэкенд
+            document
+              .getElementById("sendCodeBtn")
+              .addEventListener("click", function () {
+                // В реальном проекте здесь будет fetch на ваш сервер
+                alert(
+                  "Код отправлен на бэкенд. В ответе придёт номер телефона.",
+                );
+                // Пример: fetch('/exchange-sber-code', { method: 'POST', body: JSON.stringify({ code }) })
+                // .then(res => res.json()).then(data => { ... })
+              });
+
+            return;
+          } else {
+            resultDiv.innerHTML = `<div class="error">❌ Не найден код для Сбера.</div>`;
+            return;
+          }
+        }
+
+        // --- Обработка токена (VK, Т-Банк) ---
         if (!accessToken) {
+          // Возможно, это VK с payload (OneTap)
           const payload = queryParams.get("payload");
           if (payload) {
             try {
@@ -106,14 +143,13 @@
             }
           }
 
-          // Может быть code (тогда нужен бэкенд)
+          // Может быть code от других провайдеров (если мы не распознали state)
           const code = queryParams.get("code");
           if (code) {
             resultDiv.innerHTML = `
-            <div class="info">ℹ️ Получен код подтверждения</div>
+            <div class="info">ℹ️ Получен код подтверждения (неизвестный провайдер)</div>
             <div style="margin-top:12px; color:#64748b; font-size:14px;">
-              Для обмена кода на токен нужен бэкенд.<br>
-              Используйте <code>responseType: 'token'</code> для теста.
+              Для обмена кода на токен нужен бэкенд.
             </div>
             <pre>code: ${code}</pre>
           `;
@@ -124,7 +160,7 @@
           return;
         }
 
-        // Определяем провайдера по state
+        // Определяем провайдера по state (для токенов)
         let apiUrl = "";
         let provider = "";
 
