@@ -93,30 +93,17 @@
       .info {
         color: #f59e0b;
       }
-      .retry-btn {
-        background: #f59e0b;
-        margin-top: 10px;
-      }
-      .retry-btn:hover {
-        background: #d97706;
+      hr {
+        margin: 20px 0;
+        border: none;
+        border-top: 1px solid #e2e8f0;
       }
 
-      /* Стили для кнопки VK ID */
-      .vk-login-btn {
-        display: inline-block;
-        width: 100%;
-        padding: 16px 24px;
-        font-size: 18px;
-        font-weight: 600;
+      .btn-vk {
         background: #4c75a3;
-        color: white;
-        border: none;
-        border-radius: 12px;
-        cursor: pointer;
-        transition: background 0.15s;
-        margin-top: 10px;
+        margin-bottom: 12px;
       }
-      .vk-login-btn:hover {
+      .btn-vk:hover {
         background: #3b5f8a;
       }
     </style>
@@ -124,18 +111,19 @@
   <body>
     <div class="card">
       <h1>📱 Получение номера</h1>
-      <div class="sub">
-        Авторизуйтесь через VK ID или выберите номер из контактов
-      </div>
+      <div class="sub">Авторизуйтесь через один из сервисов</div>
+
       <div id="os-info">Определение ОС...</div>
 
-      <!-- Кнопка VK ID (гарантированно отображается) -->
-      <div id="vkIdContainer" style="margin: 20px 0"></div>
+      <!-- Кнопка VK ID (кастомная) -->
+      <button id="vkLoginBtn" class="btn-vk">Войти через VK ID</button>
 
-      <!-- Разделитель -->
-      <hr style="margin: 20px 0; border: none; border-top: 1px solid #e2e8f0" />
+      <!-- Контейнер для виджета Т-Банк (он сам нарисует кнопку) -->
+      <div id="tid-container" style="margin: 16px 0"></div>
 
-      <!-- Старая кнопка получения номера (альтернативный способ) -->
+      <hr />
+
+      <!-- Альтернативный способ (контакты / Google) -->
       <button id="getPhoneBtn">Получить номер (контакты / Google)</button>
 
       <div id="result">
@@ -143,7 +131,7 @@
       </div>
     </div>
 
-    <!-- ===== VK ID SDK (подключаем один раз) ===== -->
+    <!-- ===== VK ID SDK ===== -->
     <script src="https://unpkg.com/@vkid/sdk@<3.0.0/dist-sdk/umd/index.js"></script>
     <script>
       (function () {
@@ -156,57 +144,54 @@
 
         const VKID = window.VKIDSDK;
 
-        // Инициализация конфигурации (один раз)
         VKID.Config.init({
           app: 54663710, // Ваш ID приложения
           redirectUrl: "https://oyoha.github.io/get_number/callback.html",
           responseMode: VKID.ConfigResponseMode.Callback,
           source: VKID.ConfigSource.LOWCODE,
-          scope: "phone", // Запрашиваем номер телефона
+          scope: "phone",
         });
 
-        // Используем OAuthList – он всегда показывает кнопку "Войти через VK ID"
-        const oauthList = new VKID.OAuthList();
+        document
+          .getElementById("vkLoginBtn")
+          .addEventListener("click", function () {
+            VKID.Auth.login({
+              client_id: 54663710,
+              redirect_uri: "https://oyoha.github.io/get_number/callback.html",
+              scope: "phone",
+              response_type: "token",
+              state: "vk", // метка для callback
+            });
+          });
+      })();
+    </script>
 
-        const container = document.getElementById("vkIdContainer");
-        if (!container) {
-          console.error("Контейнер #vkIdContainer не найден");
+    <!-- ===== Виджет Т-Банк ID ===== -->
+    <script src="https://sso-forms-prod.t-static.ru/tid/widget.js"></script>
+    <script>
+      (function () {
+        if (typeof TidSDK === "undefined") {
+          console.warn("Виджет Т-Банк не загружен");
           return;
         }
 
-        oauthList
-          .render({
-            container: container,
-            oauthList: ["vkid"], // только VK ID (можно добавить "ok", "mail")
-            // showAlternativeLogin: true, // для OAuthList этот параметр не нужен
-          })
-          .on(VKID.WidgetEvents.ERROR, function (error) {
-            document.getElementById("result").innerHTML = `
-              <div class="error">❌ Ошибка виджета: ${error.message || "Неизвестная ошибка"}</div>
-            `;
-          })
-          .on(VKID.OAuthListInternalEvents.LOGIN_SUCCESS, function (payload) {
-            const code = payload.code;
-            const deviceId = payload.device_id;
+        const authParams = {
+          redirectUri: "https://oyoha.github.io/get_number/callback.html",
+          responseType: "token",
+          clientId: "ВАШ_CLIENT_ID", // замените на свой
+          state: "tbank",
+        };
 
-            // Обмен кода на токен
-            VKID.Auth.exchangeCode(code, deviceId)
-              .then(function (data) {
-                // data содержит информацию о пользователе
-                console.log("Ответ от VK ID:", data);
-                // Номер телефона может быть в data.user.phone или data.phone
-                const phone = data.user?.phone || data.phone || "не найден";
-                document.getElementById("result").innerHTML = `
-                  <div class="success">✅ Номер получен через VK ID:</div>
-                  <div class="number-item">📞 ${phone}</div>
-                `;
-              })
-              .catch(function (error) {
-                document.getElementById("result").innerHTML = `
-                  <div class="error">❌ Ошибка обмена кода: ${error.message || "Неизвестная ошибка"}</div>
-                `;
-              });
-          });
+        const uiParams = {
+          container: "#tid-container",
+          size: "l",
+          color: "primary",
+          text: "Т-Банк",
+          target: "_self",
+        };
+
+        const tidSdk = new TidSDK(authParams);
+        tidSdk.addButton(uiParams);
       })();
     </script>
 
@@ -220,7 +205,6 @@
         const osInfo = document.getElementById("os-info");
         const btn = document.getElementById("getPhoneBtn");
 
-        // ---------- Определение ОС ----------
         function getOSType() {
           const ua = navigator.userAgent || navigator.vendor || window.opera;
           if (/android/i.test(ua)) return "Android";

@@ -3,32 +3,170 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Обработка авторизации VK ID</title>
+    <title>Обработка авторизации</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        background: #f5f7fa;
+        padding: 20px;
+      }
+      .card {
+        background: white;
+        border-radius: 16px;
+        padding: 40px 30px;
+        max-width: 600px;
+        width: 100%;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+        text-align: center;
+      }
+      h1 {
+        font-size: 24px;
+        font-weight: 600;
+        color: #1e293b;
+        margin-top: 0;
+      }
+      .success {
+        color: #16a34a;
+      }
+      .error {
+        color: #dc2626;
+      }
+      .info {
+        color: #f59e0b;
+      }
+      pre {
+        background: #f1f5f9;
+        padding: 16px;
+        border-radius: 8px;
+        overflow-x: auto;
+        text-align: left;
+        font-size: 14px;
+        margin-top: 20px;
+      }
+      .number {
+        font-size: 28px;
+        font-weight: bold;
+        margin: 16px 0;
+      }
+    </style>
   </head>
   <body>
-    <h1>Обработка авторизации...</h1>
-    <pre id="result"></pre>
+    <div class="card">
+      <h1>🔐 Обработка авторизации</h1>
+      <div id="result">⏳ Проверка данных...</div>
+    </div>
 
     <script>
-      const urlParams = new URLSearchParams(window.location.search);
-      const payload = urlParams.get("payload");
+      (function () {
+        const resultDiv = document.getElementById("result");
 
-      const resultDiv = document.getElementById("result");
+        // Получаем параметры из URL (фрагмент # или query string)
+        const hashParams = new URLSearchParams(
+          window.location.hash.substring(1),
+        );
+        const queryParams = new URLSearchParams(window.location.search);
 
-      if (payload) {
-        try {
-          const decodedPayload = atob(
-            payload.replace(/_/g, "/").replace(/-/g, "+"),
-          );
-          const data = JSON.parse(decodedPayload);
-          resultDiv.textContent =
-            "Данные пользователя: " + JSON.stringify(data, null, 2);
-        } catch (e) {
-          resultDiv.textContent = "Ошибка при обработке данных: " + e.message;
+        // Ошибка?
+        let error = hashParams.get("error") || queryParams.get("error");
+        if (error) {
+          resultDiv.innerHTML = `<div class="error">❌ Ошибка: ${error}</div>`;
+          return;
         }
-      } else {
-        resultDiv.textContent = "Не удалось получить данные авторизации.";
-      }
+
+        // Пробуем извлечь access_token (при response_type=token)
+        let accessToken = hashParams.get("access_token");
+        let state = hashParams.get("state");
+
+        // Если токена нет, возможно это VK с payload (OneTap)
+        if (!accessToken) {
+          const payload = queryParams.get("payload");
+          if (payload) {
+            try {
+              const decoded = atob(
+                payload.replace(/_/g, "/").replace(/-/g, "+"),
+              );
+              const data = JSON.parse(decoded);
+              resultDiv.innerHTML = `
+              <div class="success">✅ Данные от VK ID (OneTap)</div>
+              <pre>${JSON.stringify(data, null, 2)}</pre>
+            `;
+              if (data.phone) {
+                resultDiv.innerHTML += `<div class="number">📞 ${data.phone}</div>`;
+              }
+              return;
+            } catch (e) {
+              resultDiv.innerHTML = `<div class="error">❌ Ошибка обработки payload: ${e.message}</div>`;
+              return;
+            }
+          }
+
+          // Может быть code (тогда нужен бэкенд)
+          const code = queryParams.get("code");
+          if (code) {
+            resultDiv.innerHTML = `
+            <div class="info">ℹ️ Получен код подтверждения</div>
+            <div style="margin-top:12px; color:#64748b; font-size:14px;">
+              Для обмена кода на токен нужен бэкенд.<br>
+              Используйте <code>responseType: 'token'</code> для теста.
+            </div>
+            <pre>code: ${code}</pre>
+          `;
+            return;
+          }
+
+          resultDiv.innerHTML = `<div class="error">❌ Не найден токен, код или payload.</div>`;
+          return;
+        }
+
+        // Определяем провайдера по state
+        let apiUrl = "";
+        let provider = "";
+
+        if (state === "vk") {
+          apiUrl = "https://id.vk.com/userinfo";
+          provider = "VK ID";
+        } else if (state === "tbank") {
+          apiUrl = "https://id.tbank.ru/userinfo";
+          provider = "Т-Банк ID";
+        } else {
+          // Если state не передан – пробуем оба, но лучше отказать
+          resultDiv.innerHTML = `<div class="error">❌ Неизвестный провайдер (state отсутствует).</div>`;
+          return;
+        }
+
+        resultDiv.innerHTML = `<div class="info">⏳ Получен токен от ${provider}, запрашиваем номер...</div>`;
+
+        fetch(apiUrl, {
+          headers: {
+            Authorization: "Bearer " + accessToken,
+          },
+        })
+          .then((response) => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+          })
+          .then((data) => {
+            console.log(`Данные от ${provider}:`, data);
+            const phone = data.phone || data.phone_number || "не найден";
+            resultDiv.innerHTML = `
+          <div class="success">✅ Номер получен (${provider})</div>
+          <div class="number">📞 ${phone}</div>
+          <details>
+            <summary style="cursor:pointer; color:#64748b; font-size:14px;">Подробности</summary>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          </details>
+        `;
+          })
+          .catch((err) => {
+            resultDiv.innerHTML = `<div class="error">❌ Ошибка получения номера: ${err.message}</div>`;
+          });
+      })();
     </script>
   </body>
 </html>
