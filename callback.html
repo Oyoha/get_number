@@ -87,8 +87,6 @@
         if (state === "sber") {
           const code = queryParams.get("code");
           if (code) {
-            // Здесь вы должны отправить код на ваш бэкенд для обмена на токен и получения номера.
-            // Пока просто выведем информацию.
             resultDiv.innerHTML = `
               <div class="info">✅ Код авторизации Сбера получен</div>
               <div style="margin-top:12px; color:#64748b; font-size:14px;">
@@ -100,21 +98,47 @@
               </button>
             `;
 
-            // Заглушка для отправки на бэкенд
             document
               .getElementById("sendCodeBtn")
               .addEventListener("click", function () {
-                // В реальном проекте здесь будет fetch на ваш сервер
                 alert(
                   "Код отправлен на бэкенд. В ответе придёт номер телефона.",
                 );
-                // Пример: fetch('/exchange-sber-code', { method: 'POST', body: JSON.stringify({ code }) })
-                // .then(res => res.json()).then(data => { ... })
               });
 
             return;
           } else {
             resultDiv.innerHTML = `<div class="error">❌ Не найден код для Сбера.</div>`;
+            return;
+          }
+        }
+
+        // --- Обработка MAX (если будет редирект с кодом) ---
+        if (state === "max") {
+          const code = queryParams.get("code") || queryParams.get("auth_code");
+          if (code) {
+            resultDiv.innerHTML = `
+              <div class="info">✅ Код авторизации MAX получен</div>
+              <div style="margin-top:12px; color:#64748b; font-size:14px;">
+                Код будет отправлен на бэкенд для подтверждения и получения номера телефона.
+              </div>
+              <pre>code: ${code}</pre>
+              <button id="sendMaxCodeBtn" style="margin-top:16px; padding:10px 20px; background:#ff6b00; color:white; border:none; border-radius:8px; cursor:pointer;">
+                Отправить код на бэкенд (заглушка)
+              </button>
+            `;
+
+            document
+              .getElementById("sendMaxCodeBtn")
+              .addEventListener("click", function () {
+                alert(
+                  "Код MAX отправлен на бэкенд. В ответе придёт номер телефона.",
+                );
+              });
+
+            return;
+          } else {
+            resultDiv.innerHTML = `<div class="error">❌ Не найден код для MAX.</div>`;
             return;
           }
         }

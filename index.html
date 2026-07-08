@@ -106,6 +106,14 @@
       .btn-vk:hover {
         background: #3b5f8a;
       }
+
+      .btn-max {
+        background: #ff6b00;
+        margin-top: 12px;
+      }
+      .btn-max:hover {
+        background: #e55d00;
+      }
     </style>
   </head>
   <body>
@@ -123,6 +131,9 @@
 
       <!-- Сбер ID (официальный виджет через SDK) -->
       <div id="sberIdContainer" style="margin: 16px 0"></div>
+
+      <!-- MAX (кастомная кнопка) -->
+      <button id="maxLoginBtn" class="btn-max">Войти через MAX</button>
 
       <hr />
 
@@ -234,10 +245,7 @@
           },
           container: "#sberIdContainer",
           onSuccessCallback: function ({ state, code }) {
-            // Этот колбэк вызывается после успешной авторизации
-            // code нужно отправить на ваш бэкенд для обмена на токен и получения номера
             console.log("Сбер ID успех, code:", code);
-            // Отправляем код на бэкенд
             fetch("/exchange-sber-code", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -248,7 +256,6 @@
                 return res.json();
               })
               .then((data) => {
-                // data.phone – номер телефона от Сбера
                 document.getElementById("result").innerHTML = `
                 <div class="success">✅ Номер получен через Сбер ID</div>
                 <div class="number-item">📞 ${data.phone}</div>
@@ -272,12 +279,50 @@
           .init()
           .then(() => {
             console.log("SDK Сбера инициализирован");
-            // Кнопка автоматически отрисовывается в контейнере
           })
           .catch((err) => {
             console.error("Ошибка инициализации SDK Сбера:", err);
             document.getElementById("result").innerHTML = `
               <div class="error">❌ Ошибка инициализации SDK Сбера: ${err.message}</div>
+            `;
+          });
+      })();
+    </script>
+
+    <!-- ===== MAX (прямой переход в бота) ===== -->
+    <script>
+      (function () {
+        const MAX_BOT_URL = "https://max.ru/id4205025388_1_bot"; // Замените на реальную ссылку на вашего бота
+
+        document
+          .getElementById("maxLoginBtn")
+          .addEventListener("click", function () {
+            // Генерируем уникальный код авторизации
+            const authCode =
+              Math.random().toString(36).substring(2, 15) +
+              Math.random().toString(36).substring(2, 15);
+
+            // Сохраняем код в сессионное хранилище (или глобально)
+            sessionStorage.setItem("maxAuthCode", authCode);
+
+            // Формируем ссылку на бота с параметром авторизации
+            // Обычно бот может принимать параметр start или другой
+            const botLink = `${MAX_BOT_URL}?start=auth_${authCode}`;
+
+            // Открываем ссылку в новом окне или текущем
+            window.open(botLink, "_blank");
+
+            // Показываем инструкцию пользователю
+            document.getElementById("result").innerHTML = `
+              <div class="info">🔑 Код авторизации сгенерирован:</div>
+              <div style="font-family: monospace; font-size: 18px; margin: 12px 0; background: #e2e8f0; padding: 8px; border-radius: 8px;">${authCode}</div>
+              <div style="font-size: 14px; color: #475569;">
+                Перейдите в бота MAX и подтвердите вход.<br>
+                После подтверждения вернитесь на сайт и <strong>обновите страницу</strong>.
+              </div>
+              <div style="margin-top: 12px; font-size: 13px; color: #64748b;">
+                (В реальном проекте бот отправит подтверждение на сервер, и номер телефона будет получен автоматически)
+              </div>
             `;
           });
       })();
