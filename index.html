@@ -290,40 +290,81 @@
     </script>
 
     <!-- ===== MAX (прямой переход в бота) ===== -->
+    <!-- ===== MAX (через бэкенд) ===== -->
     <script>
       (function () {
-        const MAX_BOT_URL = "https://max.ru/id4205025388_1_bot"; // Замените на реальную ссылку на вашего бота
+        // Адрес вашего бэкенда (локальный или через ngrok)
+        const BACKEND_URL = "http://localhost:3000/api"; // для локальной разработки
+        // Если вы используете ngrok, замените на https://ваш-адрес.ngrok.io/api
 
         document
           .getElementById("maxLoginBtn")
-          .addEventListener("click", function () {
-            // Генерируем уникальный код авторизации
-            const authCode =
-              Math.random().toString(36).substring(2, 15) +
-              Math.random().toString(36).substring(2, 15);
+          .addEventListener("click", async function () {
+            try {
+              // 1. Запрашиваем у бэкенда код и ссылку на бота
+              const response = await fetch(`${BACKEND_URL}/auth/generate`, {
+                method: "POST",
+              });
+              const data = await response.json();
+              if (!data.link) throw new Error("Не удалось получить ссылку");
 
-            // Сохраняем код в сессионное хранилище (или глобально)
-            sessionStorage.setItem("maxAuthCode", authCode);
+              // 2. Сохраняем код для проверки статуса
+              sessionStorage.setItem("maxAuthCode", data.code);
 
-            // Формируем ссылку на бота с параметром авторизации
-            // Обычно бот может принимать параметр start или другой
-            const botLink = `${MAX_BOT_URL}?start=auth_${authCode}`;
+              // 3. Открываем ссылку на бота в новом окне
+              window.open(data.link, "_blank");
 
-            // Открываем ссылку в новом окне или текущем
-            window.open(botLink, "_blank");
+              // 4. Показываем пользователю инструкцию и запускаем проверку статуса
+              document.getElementById("result").innerHTML = `
+          <div class="info">🔑 Код авторизации: <strong>${data.code}</strong></div>
+          <div style="font-size: 14px; color: #475569; margin-top: 8px;">
+            Перейдите в бота MAX и поделитесь номером телефона.<br>
+            Статус проверяется автоматически...
+          </div>
+          <div id="statusCheck" style="margin-top: 12px;">⏳ Ожидание подтверждения...</div>
+        `;
 
-            // Показываем инструкцию пользователю
-            document.getElementById("result").innerHTML = `
-              <div class="info">🔑 Код авторизации сгенерирован:</div>
-              <div style="font-family: monospace; font-size: 18px; margin: 12px 0; background: #e2e8f0; padding: 8px; border-radius: 8px;">${authCode}</div>
-              <div style="font-size: 14px; color: #475569;">
-                Перейдите в бота MAX и подтвердите вход.<br>
-                После подтверждения вернитесь на сайт и <strong>обновите страницу</strong>.
-              </div>
-              <div style="margin-top: 12px; font-size: 13px; color: #64748b;">
-                (В реальном проекте бот отправит подтверждение на сервер, и номер телефона будет получен автоматически)
-              </div>
-            `;
+              // 5. Периодически проверяем статус
+              let attempts = 0;
+              const maxAttempts = 60; // 60 раз * 2 секунды = 2 минуты максимум
+              const checkInterval = setInterval(async () => {
+                attempts++;
+                try {
+                  const statusRes = await fetch(
+                    `${BACKEND_URL}/auth/status?code=${data.code}`,
+                  );
+                  const statusData = await statusRes.json();
+                  if (statusData.status === "completed" && statusData.phone) {
+                    clearInterval(checkInterval);
+                    document.getElementById("result").innerHTML = `
+                <div class="success">✅ Номер получен через MAX</div>
+                <div class="number-item">📞 ${statusData.phone}</div>
+              `;
+                  } else if (
+                    statusData.status === "waiting" ||
+                    statusData.status === "pending"
+                  ) {
+                    document.getElementById("statusCheck").textContent =
+                      "⏳ Ожидание подтверждения...";
+                  } else {
+                    document.getElementById("statusCheck").textContent =
+                      "❌ Ошибка авторизации";
+                    clearInterval(checkInterval);
+                  }
+                } catch (e) {
+                  console.warn("Ошибка проверки статуса:", e);
+                }
+                if (attempts >= maxAttempts) {
+                  clearInterval(checkInterval);
+                  document.getElementById("statusCheck").textContent =
+                    "⏱️ Время ожидания истекло. Попробуйте снова.";
+                }
+              }, 2000); // проверка каждые 2 секунды
+            } catch (error) {
+              document.getElementById("result").innerHTML = `
+          <div class="error">❌ Ошибка: ${error.message}</div>
+        `;
+            }
           });
       })();
     </script>
